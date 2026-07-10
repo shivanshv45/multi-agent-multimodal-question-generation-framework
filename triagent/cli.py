@@ -41,7 +41,7 @@ def cli(ctx):
 
 @cli.command()
 @click.option("--image", "-i", type=click.Path(exists=True), required=True)
-@click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama"]), default=None)
+@click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama", "openai", "groq"]), default=None)
 @click.option("--model", "-m", type=str, default=None)
 @click.option("--context", "-c", type=str, default="")
 @click.option("--output", "-o", type=click.Path(), default="./output")
@@ -67,7 +67,7 @@ def run(image, backend, model, context, output):
 
 @cli.command()
 @click.option("--image-dir", "-d", type=click.Path(exists=True), required=True)
-@click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama"]), default=None)
+@click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama", "openai", "groq"]), default=None)
 @click.option("--output", "-o", type=click.Path(), default="./output")
 @click.option("--export", "-e", type=click.Path(), default=None)
 def batch(image_dir, backend, output, export):
@@ -120,7 +120,7 @@ def check():
     assignments[config.agents.reasoning.backend].append(f"Reasoning ({config.agents.reasoning.model})")
     assignments[config.agents.synthesis.backend].append(f"Synthesis ({config.agents.synthesis.model})")
 
-    for backend in ("gemini", "grok", "ollama"):
+    for backend in ("gemini", "grok", "ollama", "openai", "groq"):
         key_ok = key_status.get(backend, config.keys.validate(backend))
         key_str = "[green]✓ Configured[/green]" if key_ok else "[red]✗ Missing[/red]"
         agents = ", ".join(assignments.get(backend, [])) or "[dim]Not assigned[/dim]"
@@ -132,7 +132,12 @@ def check():
     for backend_name in config.get_active_backends():
         try:
             from triagent.backends import create_backend
-            key = config.keys.gemini if backend_name == "gemini" else config.keys.xai
+            key = ""
+            if backend_name == "gemini": key = config.keys.gemini
+            elif backend_name == "grok": key = config.keys.xai
+            elif backend_name == "openai": key = config.keys.openai
+            elif backend_name == "groq": key = config.keys.groq
+            
             b = create_backend(backend_name, api_key=key)
             available = asyncio.run(b.is_available())
             status = "[green]✓ Reachable[/green]" if available else "[red]✗ Unreachable[/red]"
