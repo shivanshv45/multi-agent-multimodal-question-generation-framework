@@ -58,6 +58,36 @@ class ModelBackend(ABC):
         json_mode: bool = False,
     ) -> BackendResponse: ...
 
+    async def generate_with_video(
+        self,
+        prompt: str,
+        video_path: str | Path,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        json_mode: bool = False,
+    ) -> BackendResponse:
+        """Process video natively. Backends that don't support this raise NotImplementedError."""
+        raise NotImplementedError(
+            f"{self.name} does not support native video input. "
+            "Use the keyframe extraction fallback instead."
+        )
+
+    async def generate_with_audio(
+        self,
+        prompt: str,
+        audio_path: str | Path,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        json_mode: bool = False,
+    ) -> BackendResponse:
+        """Process audio natively. Backends that don't support this raise NotImplementedError."""
+        raise NotImplementedError(
+            f"{self.name} does not support native audio input. "
+            "Use the transcription fallback instead."
+        )
+
     @abstractmethod
     async def is_available(self) -> bool: ...
 

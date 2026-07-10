@@ -1,4 +1,5 @@
-# Runs all 3 agents in sequence: Image → Visual IR → Reasoning → MCQ
+# Runs all 3 agents in sequence: Media → IR → Reasoning → MCQ
+# Supports image, video, and audio inputs
 
 from __future__ import annotations
 
@@ -12,17 +13,48 @@ from rich.panel import Panel
 from rich.table import Table
 
 from triagent.config import PipelineConfig, load_config
-from triagent.schemas import VisualIR, ReasoningOutput, BenchmarkItem
+from triagent.schemas import VisualIR, VideoIR, AudioIR, ReasoningOutput, BenchmarkItem
 from triagent.backends import create_backend
-from triagent.agents import VisualContextAgent, ReasoningAgent, SynthesisAgent
+from triagent.agents import (
+    VisualContextAgent,
+    VideoContextAgent,
+    AudioContextAgent,
+    ReasoningAgent,
+    SynthesisAgent,
+)
 
 console = Console()
+
+# File extensions for each media type
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+VIDEO_EXTENSIONS = {".mp4", ".mpeg", ".mov", ".avi", ".flv", ".mpg", ".webm", ".wmv", ".3gp"}
+AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".aac", ".ogg", ".aiff", ".m4a", ".wma"}
+
+
+def detect_media_type(path: Path) -> str:
+    """Auto-detect media type from file extension."""
+    suffix = path.suffix.lower()
+    if suffix in IMAGE_EXTENSIONS:
+        return "image"
+    elif suffix in VIDEO_EXTENSIONS:
+        return "video"
+    elif suffix in AUDIO_EXTENSIONS:
+        return "audio"
+    else:
+        raise ValueError(
+            f"Unknown file type '{suffix}' for {path.name}. "
+            f"Supported: images ({', '.join(IMAGE_EXTENSIONS)}), "
+            f"videos ({', '.join(VIDEO_EXTENSIONS)}), "
+            f"audio ({', '.join(AUDIO_EXTENSIONS)})"
+        )
 
 
 class TriAgentPipeline:
 
-    def __init__(self, visual_agent, reasoning_agent, synthesis_agent, config):
+    def __init__(self, visual_agent, video_agent, audio_agent, reasoning_agent, synthesis_agent, config):
         self.visual_agent = visual_agent
+        self.video_agent = video_agent
+        self.audio_agent = audio_agent
         self.reasoning_agent = reasoning_agent
         self.synthesis_agent = synthesis_agent
         self.config = config
@@ -55,16 +87,31 @@ class TriAgentPipeline:
             model=config.agents.synthesis.model,
         )
 
+        # Video and audio agents use the same backend as the visual agent
+        # (since they need multimodal capabilities — Gemini is recommended)
         visual_agent = VisualContextAgent(backend=visual_backend, verbose=config.verbose)
+        video_agent = VideoContextAgent(backend=visual_backend, verbose=config.verbose)
+        audio_agent = AudioContextAgent(backend=visual_backend, verbose=config.verbose)
         reasoning_agent = ReasoningAgent(backend=reasoning_backend, verbose=config.verbose)
         synthesis_agent = SynthesisAgent(backend=synthesis_backend, verbose=config.verbose)
 
-        return cls(visual_agent, reasoning_agent, synthesis_agent, config)
+        return cls(visual_agent, video_agent, audio_agent, reasoning_agent, synthesis_agent, config)
 
-    async def run(self, image_path: str | Path, additional_context: str = "", save_output: bool = True) -> BenchmarkItem:
-        image_path = Path(image_path)
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image not found: {image_path}")
+    async def run(
+        self,
+        media_path: str | Path,
+        additional_context: str = "",
+        target_language: str = "Tanglish (Tamil-English)",
+        save_output: bool = True,
+        media_type: str | None = None,
+    ) -> BenchmarkItem:
+        media_path = Path(media_path)
+        if not media_path.exists():
+            raise FileNotFoundError(f"Media not found: {media_path}")
+
+        # Auto-detect or use provided media type
+        if media_type is None:
+            media_type = detect_media_type(media_path)
 
         start_time = time.time()
 
@@ -72,23 +119,44 @@ class TriAgentPipeline:
         console.print(Panel(
             "[bold bright_white]🧠 TRI-AGENT SWARM[/bold bright_white]\n"
             "[dim]Multi-Agent Multimodal Question Generation[/dim]\n"
-            f"[dim]Image: {image_path.name}[/dim]",
+            f"[dim]{media_type.upper()}: {media_path.name}[/dim]\n"
+            f"[dim]Language: {target_language}[/dim]",
             title="Pipeline Start",
             border_style="bright_magenta",
             expand=False,
         ))
 
-        # Phase 1: look at the image, extract structured data
-        visual_ir = await self.visual_agent.process(
-            image_path=image_path, additional_context=additional_context,
+        visual_ir = None
+        video_ir = None
+        audio_ir = None
+
+        # Phase 1: Extract structured IR from the media
+        if media_type == "image":
+            visual_ir = await self.visual_agent.process(
+                image_path=media_path, additional_context=additional_context,
+            )
+        elif media_type == "video":
+            video_ir = await self.video_agent.process(
+                video_path=media_path, additional_context=additional_context,
+            )
+        elif media_type == "audio":
+            audio_ir = await self.audio_agent.process(
+                audio_path=media_path, additional_context=additional_context,
+            )
+        else:
+            raise ValueError(f"Unknown media type: {media_type}")
+
+        # Phase 2: reason about the structured data (never sees raw media)
+        reasoning_output = await self.reasoning_agent.process(
+            visual_ir=visual_ir, video_ir=video_ir, audio_ir=audio_ir,
         )
 
-        # Phase 2: reason about the structured data (never sees image)
-        reasoning_output = await self.reasoning_agent.process(visual_ir=visual_ir)
-
-        # Phase 3: write the actual question in Tamil-English
+        # Phase 3: write the actual question in the target code-mixed language
         benchmark_item = await self.synthesis_agent.process(
-            visual_ir=visual_ir, reasoning_output=reasoning_output, image_path=str(image_path),
+            reasoning_output=reasoning_output,
+            visual_ir=visual_ir, video_ir=video_ir, audio_ir=audio_ir,
+            media_path=str(media_path),
+            target_language=target_language,
         )
 
         elapsed = time.time() - start_time
@@ -96,26 +164,31 @@ class TriAgentPipeline:
         self._results.append(benchmark_item)
 
         if save_output:
-            self._save_result(benchmark_item, image_path)
+            self._save_result(benchmark_item, media_path)
 
         self._print_summary(benchmark_item, elapsed)
 
         return benchmark_item
 
-    async def run_batch(self, image_paths: list[str | Path], additional_context: str = "") -> list[BenchmarkItem]:
+    async def run_batch(
+        self,
+        media_paths: list[str | Path],
+        additional_context: str = "",
+        target_language: str = "Tanglish (Tamil-English)",
+    ) -> list[BenchmarkItem]:
         results = []
-        for i, path in enumerate(image_paths, 1):
+        for i, path in enumerate(media_paths, 1):
             console.print(f"\n{'='*60}")
-            console.print(f"[bold]Processing image {i}/{len(image_paths)}[/bold]")
+            console.print(f"[bold]Processing media {i}/{len(media_paths)}[/bold]")
             console.print(f"{'='*60}")
             try:
-                result = await self.run(path, additional_context)
+                result = await self.run(path, additional_context, target_language=target_language)
                 results.append(result)
             except Exception as e:
                 console.print(f"[red]✗ Failed on {path}: {e}[/red]")
         return results
 
-    def _save_result(self, item: BenchmarkItem, image_path: Path) -> None:
+    def _save_result(self, item: BenchmarkItem, media_path: Path) -> None:
         output_dir = self.config.output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -135,10 +208,11 @@ class TriAgentPipeline:
         table.add_column("Value", style="white")
 
         table.add_row("Question ID", item.question_id)
+        table.add_row("Source", f"{item.source_media_type.upper()}")
         table.add_row("Type", item.question_type.value)
         table.add_row("Difficulty", f"{'⭐' * item.difficulty} ({item.difficulty}/5)")
         table.add_row("Question (EN)", item.question_stem_english[:100] + "..." if len(item.question_stem_english) > 100 else item.question_stem_english)
-        table.add_row("Question (TN-EN)", item.question_stem[:100] + "..." if len(item.question_stem) > 100 else item.question_stem)
+        table.add_row(f"Question ({item.target_language})", item.question_stem[:100] + "..." if len(item.question_stem) > 100 else item.question_stem)
 
         for key in ("A", "B", "C", "D"):
             marker = "✓" if key == item.correct_answer else " "
@@ -158,6 +232,6 @@ class TriAgentPipeline:
         path = Path(output_path)
         with open(path, "w", encoding="utf-8") as f:
             for item in self._results:
-                data = item.model_dump(mode="json", exclude={"visual_ir", "reasoning_output"})
+                data = item.model_dump(mode="json", exclude={"visual_ir", "video_ir", "audio_ir", "reasoning_output"})
                 f.write(json.dumps(data, ensure_ascii=False) + "\n")
         console.print(f"[green]✓ Exported {len(self._results)} items to {path}[/green]")

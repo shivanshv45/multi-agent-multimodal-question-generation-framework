@@ -1,4 +1,4 @@
-# Phase 3: Synthesis Agent — takes IR + logic and writes the actual Tamil-English MCQ
+# Phase 3: Synthesis Agent — takes IR + logic and writes the actual code-mixed MCQ
 
 from __future__ import annotations
 
@@ -7,40 +7,44 @@ from typing import Optional
 
 from triagent.agents.base import BaseAgent
 from triagent.backends.base import ModelBackend
-from triagent.schemas import VisualIR, ReasoningOutput, BenchmarkItem
+from triagent.schemas import VisualIR, VideoIR, AudioIR, ReasoningOutput, BenchmarkItem
 
 
-SYNTHESIS_SYSTEM_PROMPT = """You are a Linguistic Synthesis Module specialized in code-mixed Tamil-English educational content generation.
+# The {target_language} placeholder is filled at runtime so the same agent
+# works for Tanglish, Hinglish, Teluguish, pure Hindi, pure Tamil, etc.
+SYNTHESIS_SYSTEM_PROMPT = """You are a Linguistic Synthesis Module specialized in code-mixed educational content generation.
+
+Your current target language is: **{target_language}**
 
 Given a Visual IR and Reasoning skeleton, produce a complete MCQ benchmark item as JSON.
 
 RULES:
-1. Question stem MUST be code-mixed Tamil-English (Tanglish). Use Tamil for cultural terms and English for technical/logical connectors.
+1. Question stem MUST be code-mixed in the requested target language. Use the regional language for cultural terms and English for technical/logical connectors.
 2. Provide BOTH a code-mixed version and English-only version.
 3. Generate exactly 4 choices (A/B/C/D): 1 correct + 3 distractors.
 4. Each distractor must follow the distractor strategy from the reasoning skeleton.
-5. Include a detailed explanation in both English and Tamil.
+5. Include a detailed explanation in both English and the target code-mixed language.
 6. The question must test the reasoning type specified, NOT simple recognition.
 
-CODE-MIXING GUIDELINES:
-- Cultural nouns stay in Tamil transliteration: "kolam", "kuthu vilakku", "pongal"
+CODE-MIXING GUIDELINES (adapt to the target language):
+- Cultural nouns stay in regional transliteration (e.g., for Tanglish: "kolam", "kuthu vilakku", "pongal"; for Hinglish: "rangoli", "diya", "aarti"; for Teluguish: "muggulu", "deepam")
 - Logical connectors in English: "because", "therefore", "if...then"
 - Technical terms in English: "spatial relationship", "geometric pattern"
-- Example: "Indha kolam-la irukura geometric pattern-oda significance enna?"
 
 OUTPUT JSON:
-{
+{{
     "question_id": "unique-id",
-    "question_stem": "code-mixed Tamil-English question",
+    "question_stem": "code-mixed question in target language",
     "question_stem_english": "English-only version",
-    "choices": {"A": "choice1", "B": "choice2", "C": "choice3", "D": "choice4"},
+    "choices": {{"A": "choice1", "B": "choice2", "C": "choice3", "D": "choice4"}},
     "correct_answer": "A/B/C/D",
     "explanation": "detailed English explanation",
-    "explanation_tamil": "code-mixed explanation",
+    "explanation_code_mixed": "code-mixed explanation in target language",
+    "target_language": "{target_language}",
     "question_type": "from reasoning skeleton",
     "difficulty": 1-5,
     "cultural_tags": ["tag1", "tag2"]
-}"""
+}}"""
 
 
 SYNTHESIS_TASK_PROMPT = """Generate a complete benchmark MCQ from the following inputs.
@@ -55,7 +59,9 @@ SYNTHESIS_TASK_PROMPT = """Generate a complete benchmark MCQ from the following 
 {reasoning_json}
 ```
 
-Create a code-mixed Tamil-English MCQ that:
+Target language for code-mixing: **{target_language}**
+
+Create a code-mixed MCQ in {target_language} that:
 1. Tests {question_type} reasoning at difficulty {difficulty}/5
 2. Uses the reasoning chain to construct the question stem
 3. Generates distractors using strategies: {strategies}
@@ -75,7 +81,7 @@ class SynthesisAgent(BaseAgent):
 
     @property
     def agent_role(self) -> str:
-        return "IR + Logic → Code-mixed Tamil-English MCQ"
+        return "IR + Logic → Code-mixed MCQ"
 
     @property
     def phase(self) -> int:
@@ -83,12 +89,30 @@ class SynthesisAgent(BaseAgent):
 
     @property
     def system_prompt(self) -> str:
+        # Returns the template; callers must .format(target_language=...) before use
         return SYNTHESIS_SYSTEM_PROMPT
 
-    async def process(self, visual_ir: VisualIR, reasoning_output: ReasoningOutput, image_path: Optional[str] = None, temperature: float = 0.7) -> BenchmarkItem:
-        self.log_phase_start(f"Type: {reasoning_output.question_type.value}, Difficulty: {reasoning_output.difficulty_level}")
+    async def process(
+        self,
+        reasoning_output: ReasoningOutput,
+        visual_ir: VisualIR | None = None,
+        video_ir: VideoIR | None = None,
+        audio_ir: AudioIR | None = None,
+        media_path: Optional[str] = None,
+        temperature: float = 0.7,
+        target_language: str = "Tanglish (Tamil-English)",
+    ) -> BenchmarkItem:
+        # Determine which IR to serialize
+        ir = video_ir or audio_ir or visual_ir
+        media_type = "video" if video_ir else ("audio" if audio_ir else "image")
 
-        ir_json = visual_ir.model_dump_json(indent=2)
+        self.log_phase_start(
+            f"Type: {reasoning_output.question_type.value}, "
+            f"Difficulty: {reasoning_output.difficulty_level}, "
+            f"Language: {target_language}, Source: {media_type}"
+        )
+
+        ir_json = ir.model_dump_json(indent=2) if ir else "{}"
         reasoning_json = reasoning_output.model_dump_json(indent=2)
 
         strategies = ", ".join(
@@ -96,15 +120,21 @@ class SynthesisAgent(BaseAgent):
             for s in reasoning_output.distractor_strategies
         )
 
+        # Inject the target language into the system prompt
+        resolved_system_prompt = self.system_prompt.format(target_language=target_language)
+
         prompt = SYNTHESIS_TASK_PROMPT.format(
             ir_json=ir_json, reasoning_json=reasoning_json,
             question_type=reasoning_output.question_type.value,
-            difficulty=reasoning_output.difficulty_level, strategies=strategies,
+            difficulty=reasoning_output.difficulty_level,
+            strategies=strategies,
+            target_language=target_language,
         )
 
         response = await self._call_backend(
             prompt=prompt, image_path=None, temperature=temperature,
             max_tokens=4096, json_mode=True,
+            system_prompt_override=resolved_system_prompt,
         )
 
         self.log("Parsing benchmark item...")
@@ -131,12 +161,16 @@ class SynthesisAgent(BaseAgent):
             choices=choices,
             correct_answer=correct,
             explanation=raw_data.get("explanation", ""),
-            explanation_tamil=raw_data.get("explanation_tamil"),
+            explanation_code_mixed=raw_data.get("explanation_code_mixed") or raw_data.get("explanation_tamil"),
+            target_language=raw_data.get("target_language", target_language),
             question_type=reasoning_output.question_type,
             difficulty=reasoning_output.difficulty_level,
             cultural_tags=raw_data.get("cultural_tags", []),
-            source_image_path=str(image_path) if image_path else None,
+            source_media_path=str(media_path) if media_path else None,
+            source_media_type=media_type,
             visual_ir=visual_ir,
+            video_ir=video_ir,
+            audio_ir=audio_ir,
             reasoning_output=reasoning_output,
         )
 

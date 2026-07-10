@@ -7,18 +7,6 @@
 
 ---
 
-## Architecture Overview
-
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Phase 1:      │     │   Phase 2:      │     │   Phase 3:      │
-│   Visual Agent  │────▶│   Reasoning     │────▶│   Synthesis     │
-│   (Grounder)    │ IR  │   Agent         │Logic│   Agent         │
-│                 │     │   (Logician)    │     │   (Linguist)    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-     PaliGemma /              Gemini /               Gemini /
-     Gemini Vision            Grok / Ollama          Grok / Ollama
-```
 
 ### The Three Agents
 
@@ -34,7 +22,9 @@
 |---------|--------|------|
 | **Google Gemini** | gemini-2.5-flash, gemini-2.5-pro | Cloud API |
 | **xAI Grok** | grok-3, grok-3-mini | Cloud API |
-| **Ollama** | llama3, mistral, llava, etc. | Local |
+| **Ollama** | llama3, mistral, llava, etc. | Local | in progess , 
+
+| will add more models later |
 
 ## Setup
 
