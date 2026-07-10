@@ -216,7 +216,8 @@ class TriAgentPipeline:
 
         for key in ("A", "B", "C", "D"):
             marker = "✓" if key == item.correct_answer else " "
-            table.add_row(f"  [{marker}] {key}", item.choices.get(key, ""))
+            table.add_row(f"  [{marker}] {key} (EN)", item.choices_english.get(key, ""))
+            table.add_row(f"  [{marker}] {key} (Tanglish)", item.choices_tanglish.get(key, ""))
 
         table.add_row("Correct Answer", f"[bold green]{item.correct_answer}[/bold green]")
         table.add_row("Cultural Tags", ", ".join(item.cultural_tags))

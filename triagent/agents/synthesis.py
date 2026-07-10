@@ -16,7 +16,7 @@ SYNTHESIS_SYSTEM_PROMPT = """You are a Linguistic Synthesis Module specialized i
 
 Your current target language is: **{target_language}**
 
-Given a Visual IR and Reasoning skeleton, produce a complete MCQ benchmark item as JSON.
+Given a Visual IR and Reasoning skeleton, produce a complete MCQ benchmark item as JSON in multiple languages.
 
 RULES:
 1. Question stem MUST be code-mixed in the requested target language. Use the regional language for cultural terms and English for technical/logical connectors.
@@ -142,13 +142,15 @@ class SynthesisAgent(BaseAgent):
 
         question_id = raw_data.get("question_id", f"taq-{uuid.uuid4().hex[:8]}")
 
-        # Make sure we always have 4 choices
-        choices = raw_data.get("choices", {})
-        if not isinstance(choices, dict) or len(choices) < 4:
-            choices = {
-                "A": choices.get("A", "Option A"), "B": choices.get("B", "Option B"),
-                "C": choices.get("C", "Option C"), "D": choices.get("D", "Option D"),
-            }
+        def _ensure_choices(choices_dict):
+            if not isinstance(choices_dict, dict) or len(choices_dict) < 4:
+                return {
+                    "A": choices_dict.get("A", "Option A") if isinstance(choices_dict, dict) else "Option A",
+                    "B": choices_dict.get("B", "Option B") if isinstance(choices_dict, dict) else "Option B",
+                    "C": choices_dict.get("C", "Option C") if isinstance(choices_dict, dict) else "Option C",
+                    "D": choices_dict.get("D", "Option D") if isinstance(choices_dict, dict) else "Option D",
+                }
+            return choices_dict
 
         correct = raw_data.get("correct_answer", "A")
         if correct not in ("A", "B", "C", "D"):
@@ -156,9 +158,18 @@ class SynthesisAgent(BaseAgent):
 
         benchmark_item = BenchmarkItem(
             question_id=question_id,
-            question_stem=raw_data.get("question_stem", ""),
             question_stem_english=raw_data.get("question_stem_english", ""),
-            choices=choices,
+            question_stem_tanglish=raw_data.get("question_stem_tanglish", ""),
+            question_stem_tamil=raw_data.get("question_stem_tamil", ""),
+            question_stem_telugu=raw_data.get("question_stem_telugu", ""),
+            question_stem_hindi=raw_data.get("question_stem_hindi", ""),
+            
+            choices_english=_ensure_choices(raw_data.get("choices_english", {})),
+            choices_tanglish=_ensure_choices(raw_data.get("choices_tanglish", {})),
+            choices_tamil=_ensure_choices(raw_data.get("choices_tamil", {})),
+            choices_telugu=_ensure_choices(raw_data.get("choices_telugu", {})),
+            choices_hindi=_ensure_choices(raw_data.get("choices_hindi", {})),
+            
             correct_answer=correct,
             explanation=raw_data.get("explanation", ""),
             explanation_code_mixed=raw_data.get("explanation_code_mixed") or raw_data.get("explanation_tamil"),

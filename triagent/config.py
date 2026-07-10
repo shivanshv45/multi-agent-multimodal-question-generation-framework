@@ -59,6 +59,8 @@ class AgentConfig:
 class APIKeys:
     gemini: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
     xai: str = field(default_factory=lambda: os.getenv("XAI_API_KEY", ""))
+    openai: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
+    groq: str = field(default_factory=lambda: os.getenv("GROQ_API_KEY", ""))
     ollama_host: str = field(
         default_factory=lambda: os.getenv("OLLAMA_HOST", "http://localhost:11434")
     )
@@ -68,6 +70,10 @@ class APIKeys:
             return bool(self.gemini) and self.gemini != "your_gemini_api_key_here"
         elif backend == "grok":
             return bool(self.xai) and self.xai != "your_xai_api_key_here"
+        elif backend == "openai":
+            return bool(self.openai) and self.openai != "your_openai_api_key_here"
+        elif backend == "groq":
+            return bool(self.groq) and self.groq != "your_groq_api_key_here"
         elif backend == "ollama":
             return True
         return False
@@ -118,6 +124,10 @@ def load_config(**overrides) -> PipelineConfig:
         config.keys.gemini = overrides["gemini_key"]
     if "xai_key" in overrides:
         config.keys.xai = overrides["xai_key"]
+    if "openai_key" in overrides:
+        config.keys.openai = overrides["openai_key"]
+    if "groq_key" in overrides:
+        config.keys.groq = overrides["groq_key"]
     if "verbose" in overrides:
         config.verbose = overrides["verbose"]
 
