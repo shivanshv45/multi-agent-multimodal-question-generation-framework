@@ -69,12 +69,27 @@ class ReasoningOutput(BaseModel):
 
 class BenchmarkItem(BaseModel):
     question_id: str = Field(..., description="Unique ID")
-    question_stem: str = Field(..., description="Code-mixed Tamil-English question")
+    
     question_stem_english: str = Field(..., description="English-only version")
-    choices: dict[str, str] = Field(..., description="A/B/C/D answer choices")
-    correct_answer: str = Field(..., description="Correct key A/B/C/D")
-    explanation: str = Field(..., description="Why the answer is correct")
-    explanation_tamil: Optional[str] = Field(None, description="Tamil explanation")
+    question_stem_tanglish: str = Field(..., description="Code-mixed Tamil-English question")
+    question_stem_tamil: str = Field(..., description="Pure Tamil question")
+    question_stem_telugu: str = Field(..., description="Pure Telugu question")
+    question_stem_hindi: str = Field(..., description="Pure Hindi question")
+    
+    choices_english: dict[str, str] = Field(..., description="A/B/C/D English choices")
+    choices_tanglish: dict[str, str] = Field(..., description="A/B/C/D Tanglish choices")
+    choices_tamil: dict[str, str] = Field(..., description="A/B/C/D Tamil choices")
+    choices_telugu: dict[str, str] = Field(..., description="A/B/C/D Telugu choices")
+    choices_hindi: dict[str, str] = Field(..., description="A/B/C/D Hindi choices")
+    
+    correct_answer: str = Field(..., description="Correct key A/B/C/D (same across all languages)")
+    
+    explanation_english: str = Field(..., description="Why the answer is correct in English")
+    explanation_tanglish: str = Field(..., description="Tanglish explanation")
+    explanation_tamil: str = Field(..., description="Tamil explanation")
+    explanation_telugu: str = Field(..., description="Telugu explanation")
+    explanation_hindi: str = Field(..., description="Hindi explanation")
+    
     question_type: QuestionType = Field(..., description="Reasoning type tested")
     difficulty: int = Field(..., description="Difficulty 1-5", ge=1, le=5)
     cultural_tags: list[str] = Field(default_factory=list, description="Cultural context tags")

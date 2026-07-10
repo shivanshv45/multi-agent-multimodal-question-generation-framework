@@ -138,11 +138,15 @@ class TriAgentPipeline:
         table.add_row("Type", item.question_type.value)
         table.add_row("Difficulty", f"{'⭐' * item.difficulty} ({item.difficulty}/5)")
         table.add_row("Question (EN)", item.question_stem_english[:100] + "..." if len(item.question_stem_english) > 100 else item.question_stem_english)
-        table.add_row("Question (TN-EN)", item.question_stem[:100] + "..." if len(item.question_stem) > 100 else item.question_stem)
+        table.add_row("Question (Tanglish)", item.question_stem_tanglish[:100] + "..." if len(item.question_stem_tanglish) > 100 else item.question_stem_tanglish)
+        table.add_row("Question (Tamil)", item.question_stem_tamil[:100] + "..." if len(item.question_stem_tamil) > 100 else item.question_stem_tamil)
+        table.add_row("Question (Telugu)", item.question_stem_telugu[:100] + "..." if len(item.question_stem_telugu) > 100 else item.question_stem_telugu)
+        table.add_row("Question (Hindi)", item.question_stem_hindi[:100] + "..." if len(item.question_stem_hindi) > 100 else item.question_stem_hindi)
 
         for key in ("A", "B", "C", "D"):
             marker = "✓" if key == item.correct_answer else " "
-            table.add_row(f"  [{marker}] {key}", item.choices.get(key, ""))
+            table.add_row(f"  [{marker}] {key} (EN)", item.choices_english.get(key, ""))
+            table.add_row(f"  [{marker}] {key} (Tanglish)", item.choices_tanglish.get(key, ""))
 
         table.add_row("Correct Answer", f"[bold green]{item.correct_answer}[/bold green]")
         table.add_row("Cultural Tags", ", ".join(item.cultural_tags))
