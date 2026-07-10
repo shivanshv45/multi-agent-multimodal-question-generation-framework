@@ -47,7 +47,7 @@ def cli(ctx):
 @click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama"]), default=None)
 @click.option("--model", "-m", type=str, default=None)
 @click.option("--context", "-c", type=str, default="")
-@click.option("--language", "-l", type=str, default="Tanglish (Tamil-English)", help="Target code-mixed language")
+@click.option("--language", "-l", type=str, default="Tamil", help="Base language (e.g. Tamil, Hindi, Telugu)")
 @click.option("--output", "-o", type=click.Path(), default="./output")
 def run(image, media, backend, model, context, language, output):
     """Process a single image, video, or audio file into a benchmark MCQ."""
@@ -72,14 +72,14 @@ def run(image, media, backend, model, context, language, output):
     config = load_config(**overrides)
     pipeline = TriAgentPipeline.from_config(config)
 
-    result = asyncio.run(pipeline.run(media_path, additional_context=context, target_language=language))
+    result = asyncio.run(pipeline.run(media_path, additional_context=context, base_language=language))
     console.print("\n[bold green]✓ Pipeline completed successfully![/bold green]")
 
 
 @cli.command()
 @click.option("--media-dir", "-d", type=click.Path(exists=True), required=True, help="Directory of media files")
 @click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama"]), default=None)
-@click.option("--language", "-l", type=str, default="Tanglish (Tamil-English)", help="Target code-mixed language")
+@click.option("--language", "-l", type=str, default="Tamil", help="Base language (e.g. Tamil, Hindi, Telugu)")
 @click.option("--output", "-o", type=click.Path(), default="./output")
 @click.option("--export", "-e", type=click.Path(), default=None)
 def batch(media_dir, backend, language, output, export):
@@ -110,7 +110,7 @@ def batch(media_dir, backend, language, output, export):
 
     config = load_config(**overrides)
     pipeline = TriAgentPipeline.from_config(config)
-    results = asyncio.run(pipeline.run_batch(media_files, target_language=language))
+    results = asyncio.run(pipeline.run_batch(media_files, base_language=language))
 
     if export:
         pipeline.export_dataset(export)

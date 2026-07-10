@@ -101,7 +101,7 @@ class TriAgentPipeline:
         self,
         media_path: str | Path,
         additional_context: str = "",
-        target_language: str = "Tanglish (Tamil-English)",
+        base_language: str = "Tamil",
         save_output: bool = True,
         media_type: str | None = None,
     ) -> BenchmarkItem:
@@ -120,7 +120,7 @@ class TriAgentPipeline:
             "[bold bright_white]🧠 TRI-AGENT SWARM[/bold bright_white]\n"
             "[dim]Multi-Agent Multimodal Question Generation[/dim]\n"
             f"[dim]{media_type.upper()}: {media_path.name}[/dim]\n"
-            f"[dim]Language: {target_language}[/dim]",
+            f"[dim]Base Language: {base_language}[/dim]",
             title="Pipeline Start",
             border_style="bright_magenta",
             expand=False,
@@ -156,7 +156,7 @@ class TriAgentPipeline:
             reasoning_output=reasoning_output,
             visual_ir=visual_ir, video_ir=video_ir, audio_ir=audio_ir,
             media_path=str(media_path),
-            target_language=target_language,
+            base_language=base_language,
         )
 
         elapsed = time.time() - start_time
@@ -174,7 +174,7 @@ class TriAgentPipeline:
         self,
         media_paths: list[str | Path],
         additional_context: str = "",
-        target_language: str = "Tanglish (Tamil-English)",
+        base_language: str = "Tamil",
     ) -> list[BenchmarkItem]:
         results = []
         for i, path in enumerate(media_paths, 1):
@@ -182,7 +182,7 @@ class TriAgentPipeline:
             console.print(f"[bold]Processing media {i}/{len(media_paths)}[/bold]")
             console.print(f"{'='*60}")
             try:
-                result = await self.run(path, additional_context, target_language=target_language)
+                result = await self.run(path, additional_context, base_language=base_language)
                 results.append(result)
             except Exception as e:
                 console.print(f"[red]✗ Failed on {path}: {e}[/red]")
@@ -191,8 +191,8 @@ class TriAgentPipeline:
     def _save_result(self, item: BenchmarkItem, media_path: Path) -> None:
         output_dir = self.config.output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
-
-        filename = f"{item.question_id}.json"
+        # Include the original media filename (without extension) in the output filename
+        filename = f"{media_path.stem}_{item.question_id}.json"
         output_path = output_dir / filename
 
         data = item.model_dump(mode="json")
@@ -211,13 +211,14 @@ class TriAgentPipeline:
         table.add_row("Source", f"{item.source_media_type.upper()}")
         table.add_row("Type", item.question_type.value)
         table.add_row("Difficulty", f"{'⭐' * item.difficulty} ({item.difficulty}/5)")
-        table.add_row("Question (EN)", item.question_stem_english[:100] + "..." if len(item.question_stem_english) > 100 else item.question_stem_english)
-        table.add_row(f"Question ({item.target_language})", item.question_stem[:100] + "..." if len(item.question_stem) > 100 else item.question_stem)
+        table.add_row("Question (EN)", item.question_stem_english[:100] + "...")
+        table.add_row(f"Question (Pure {item.base_language})", item.question_stem_pure[:100] + "...")
+        table.add_row(f"Question (Mixed)", item.question_stem_mixed[:100] + "...")
 
         for key in ("A", "B", "C", "D"):
             marker = "✓" if key == item.correct_answer else " "
-            table.add_row(f"  [{marker}] {key} (EN)", item.choices_english.get(key, ""))
-            table.add_row(f"  [{marker}] {key} (Tanglish)", item.choices_tanglish.get(key, ""))
+            table.add_row(f"  [{marker}] {key} (Pure)", item.choices_pure.get(key, ""))
+            table.add_row(f"  [{marker}] {key} (Mixed)", item.choices_mixed.get(key, ""))
 
         table.add_row("Correct Answer", f"[bold green]{item.correct_answer}[/bold green]")
         table.add_row("Cultural Tags", ", ".join(item.cultural_tags))

@@ -162,13 +162,25 @@ class ReasoningOutput(BaseModel):
 
 class BenchmarkItem(BaseModel):
     question_id: str = Field(..., description="Unique ID")
-    question_stem: str = Field(..., description="Code-mixed target-language question")
+    
+    # English baseline
     question_stem_english: str = Field(..., description="English-only version")
-    choices: dict[str, str] = Field(..., description="A/B/C/D answer choices")
+    choices_english: dict[str, str] = Field(..., description="English A/B/C/D choices")
+    explanation_english: str = Field(..., description="Why the answer is correct in English")
+    
+    # Pure Regional Language
+    question_stem_pure: str = Field(..., description="Pure regional language version")
+    choices_pure: dict[str, str] = Field(..., description="Pure regional A/B/C/D choices")
+    explanation_pure: str = Field(..., description="Explanation in pure regional language")
+    
+    # Code-Mixed Language (e.g., Tanglish, Hinglish)
+    question_stem_mixed: str = Field(..., description="Code-mixed version")
+    choices_mixed: dict[str, str] = Field(..., description="Code-mixed A/B/C/D choices")
+    explanation_mixed: str = Field(..., description="Explanation in code-mixed language")
+    
     correct_answer: str = Field(..., description="Correct key A/B/C/D")
-    explanation: str = Field(..., description="Why the answer is correct")
-    explanation_code_mixed: Optional[str] = Field(None, description="Code-mixed explanation in the target language")
-    target_language: str = Field(default="Tanglish (Tamil-English)", description="The target code-mixed language for this item")
+    base_language: str = Field(default="Tamil", description="The base language (e.g., Tamil, Hindi, Telugu)")
+
     question_type: QuestionType = Field(..., description="Reasoning type tested")
     difficulty: int = Field(..., description="Difficulty 1-5", ge=1, le=5)
     cultural_tags: list[str] = Field(default_factory=list, description="Cultural context tags")

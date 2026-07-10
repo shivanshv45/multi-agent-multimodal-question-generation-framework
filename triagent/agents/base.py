@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Optional
@@ -109,8 +110,10 @@ class BaseAgent(ABC):
         if cleaned.startswith("```"):
             first_newline = cleaned.index("\n")
             cleaned = cleaned[first_newline + 1:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3].strip()
+            cleaned = cleaned.strip()
+
+        # Remove trailing commas which break standard json.loads()
+        cleaned = re.sub(r',\s*([\]}])', r'\1', cleaned)
 
         try:
             return json.loads(cleaned)

@@ -130,5 +130,7 @@ def load_config(**overrides) -> PipelineConfig:
         config.keys.groq = overrides["groq_key"]
     if "verbose" in overrides:
         config.verbose = overrides["verbose"]
+    if "output_dir" in overrides:
+        config.output_dir = Path(overrides["output_dir"])
 
     return config

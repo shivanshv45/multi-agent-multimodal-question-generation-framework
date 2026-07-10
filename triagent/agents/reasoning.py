@@ -35,6 +35,36 @@ OUTPUT JSON:
     "difficulty_level": 1-5,
     "required_knowledge": ["domain1", "domain2"],
     "analogical_mapping": {"source": "target"} or null
+}
+
+## EXAMPLE OUTPUT (for a Kolam and Kuthu Vilakku IR)
+{
+    "question_type": "cultural_inference",
+    "reasoning_chain": [
+        "1. IR indicates a Kolam drawn on the threshold and a lit Kuthu Vilakku flanking the right.",
+        "2. The Kolam is identified as an everyday morning ritual serving boundary demarcation.",
+        "3. The lit lamp indicates a dawn/dusk transition.",
+        "4. Combine these: It is dawn, and the household has just completed the auspicious welcoming ritual.",
+        "5. Formulate a question asking what implicit action has just concluded based on these two specific artifacts."
+    ],
+    "correct_answer_logic": "The combination of a freshly drawn Kolam and a lit Kuthu Vilakku explicitly marks the conclusion of the dawn welcoming/cleansing ritual in South Indian households.",
+    "distractor_strategies": [
+        "temporal_confusion",
+        "cultural_misattribution",
+        "functional_swap"
+    ],
+    "distractor_rationales": [
+        "Plausible if they confuse dawn rituals with evening only rituals.",
+        "Plausible if they associate these specific items with a North Indian Diwali celebration instead of everyday South Indian practice.",
+        "Plausible if they think the Kolam is purely decorative and the lamp is just for reading light."
+    ],
+    "difficulty_level": 4,
+    "required_knowledge": [
+        "South Indian morning rituals",
+        "Functional purpose of Kolam vs Rangoli",
+        "Significance of Kuthu Vilakku timing"
+    ],
+    "analogical_mapping": null
 }"""
 
 

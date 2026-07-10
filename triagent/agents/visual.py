@@ -47,6 +47,38 @@ Parse the provided image into a structured JSON representation containing cultur
     "confidence_score": 0.0-1.0
 }
 
+## EXAMPLE OUTPUT
+{
+    "focal_entities": ["Kolam (geometric rice flour pattern)", "Kuthu Vilakku (brass lamp)", "Vazhai Ilai (banana leaf)"],
+    "entity_attributes": {
+        "Kolam": ["white", "symmetrical", "drawn on ground"],
+        "Kuthu Vilakku": ["brass", "lit", "five-wick"]
+    },
+    "spatial_relations": {
+        "topology": "The Kolam is centered on the threshold. The Kuthu Vilakku is placed symmetrically on the right side of the door.",
+        "relative_positions": ["Kolam at center ground", "Kuthu Vilakku flanking right"],
+        "geometric_patterns": ["Radial symmetry in Kolam", "Dot-grid constraint (pulli kolam)"]
+    },
+    "cultural_markers": [
+        {
+            "item": "Kolam",
+            "cultural_context": "Tamil Hindu everyday morning ritual",
+            "functional_significance": "Boundary demarcation and ecosystem sustenance (feeding insects)",
+            "symbolic_meaning": "Auspiciousness, welcoming Lakshmi"
+        },
+        {
+            "item": "Kuthu Vilakku",
+            "cultural_context": "South Indian traditional lighting",
+            "functional_significance": "Illumination during auspicious timings (dawn/dusk)",
+            "symbolic_meaning": "Dispelling ignorance"
+        }
+    ],
+    "implicit_actions": ["Dawn/Dusk transition", "Recent completion of ritual drawing"],
+    "scene_category": "ritual",
+    "language_cues": [],
+    "confidence_score": 0.95
+}
+
 Output ONLY the JSON object. Nothing else."""
 
 
