@@ -1,4 +1,4 @@
-# Demo — downloads a sample image and runs the full pipeline with pretty output
+# Demo — runs the full pipeline with pretty output for any media type
 
 from __future__ import annotations
 
@@ -13,9 +13,11 @@ from rich.syntax import Syntax
 import json
 
 from triagent.config import load_config
-from triagent.pipeline import TriAgentPipeline
+from triagent.pipeline import TriAgentPipeline, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS
 
 console = Console()
+
+ALL_MEDIA_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
 
 
 DEMO_BANNER = """
@@ -29,42 +31,56 @@ DEMO_BANNER = """
 """
 
 
-async def run_demo(image_path=None, backend="gemini", model=None):
+async def run_demo(media_path=None, backend="gemini", model=None, language="Tanglish (Tamil-English)"):
     console.print(DEMO_BANNER)
 
-    # Find an image to use
-    if image_path:
-        img = Path(image_path)
-        if not img.exists():
-            console.print(f"[red]Image not found: {img}[/red]")
+    # Find a media file to use
+    if media_path:
+        media = Path(media_path)
+        if not media.exists():
+            console.print(f"[red]Media not found: {media}[/red]")
             sys.exit(1)
     else:
+        # Try to find sample media
         sample_dir = Path("data/sample_images")
         if sample_dir.exists():
-            images = list(sample_dir.glob("*.jpg")) + list(sample_dir.glob("*.png")) + list(sample_dir.glob("*.webp"))
-            if images:
-                img = images[0]
-                console.print(f"[cyan]Using sample image: {img}[/cyan]")
+            media_files = [f for f in sample_dir.iterdir() if f.suffix.lower() in ALL_MEDIA_EXTENSIONS]
+            if media_files:
+                media = media_files[0]
+                console.print(f"[cyan]Using sample media: {media}[/cyan]")
             else:
-                console.print("[red]No sample images found in data/sample_images/[/red]")
-                console.print("[yellow]Please provide an image:[/yellow]")
-                console.print("  python -m triagent.demo --image path/to/image.jpg")
+                console.print("[red]No sample media found in data/sample_images/[/red]")
+                console.print("[yellow]Please provide a media file:[/yellow]")
+                console.print("  python -m triagent.demo --media path/to/file")
                 sys.exit(1)
         else:
             console.print("[cyan]Downloading sample image...[/cyan]")
-            img = await _download_sample_image()
-            if not img:
+            media = await _download_sample_image()
+            if not media:
                 console.print("[red]Could not download sample image.[/red]")
-                console.print("[yellow]Please provide one manually:[/yellow]")
-                console.print("  python -m triagent.demo --image path/to/image.jpg")
+                console.print("[yellow]Please provide a media file manually:[/yellow]")
+                console.print("  python -m triagent.demo --media path/to/file")
                 sys.exit(1)
 
-    console.print(f"\n[bold]📸 Image: {img.name}[/bold]")
+    # Detect and display media type
+    suffix = media.suffix.lower()
+    if suffix in IMAGE_EXTENSIONS:
+        media_emoji, media_label = "📸", "Image"
+    elif suffix in VIDEO_EXTENSIONS:
+        media_emoji, media_label = "🎬", "Video"
+    elif suffix in AUDIO_EXTENSIONS:
+        media_emoji, media_label = "🎵", "Audio"
+    else:
+        media_emoji, media_label = "📄", "Unknown"
+
+    console.print(f"\n[bold]{media_emoji} {media_label}: {media.name}[/bold]")
 
     # Set up the pipeline
     console.print(Panel(
         "[bold]Initializing Tri-Agent Swarm...[/bold]\n"
-        f"[dim]Backend: {backend}[/dim]",
+        f"[dim]Backend: {backend}[/dim]\n"
+        f"[dim]Media: {media_label}[/dim]\n"
+        f"[dim]Language: {language}[/dim]",
         border_style="cyan",
         expand=False,
     ))
@@ -94,8 +110,9 @@ async def run_demo(image_path=None, backend="gemini", model=None):
     console.print("\n[bold bright_green]▶ Running Pipeline...[/bold bright_green]\n")
 
     result = await pipeline.run(
-        image_path=img,
+        media_path=media,
         additional_context="South Indian cultural context, Tamil Nadu traditions",
+        target_language=language,
         save_output=True,
     )
 
@@ -104,15 +121,24 @@ async def run_demo(image_path=None, backend="gemini", model=None):
     console.print("[bold bright_green]✓ PIPELINE COMPLETE — FULL RESULTS[/bold bright_green]")
     console.print("=" * 60)
 
+    # Display the appropriate IR based on media type
     if result.visual_ir:
         ir_json = json.dumps(result.visual_ir.model_dump(mode="json"), indent=2, ensure_ascii=False)
         console.print(Panel(Syntax(ir_json, "json", theme="monokai"), title="Phase 1: Visual IR", border_style="blue"))
+
+    if result.video_ir:
+        ir_json = json.dumps(result.video_ir.model_dump(mode="json"), indent=2, ensure_ascii=False)
+        console.print(Panel(Syntax(ir_json, "json", theme="monokai"), title="Phase 1: Video IR", border_style="blue"))
+
+    if result.audio_ir:
+        ir_json = json.dumps(result.audio_ir.model_dump(mode="json"), indent=2, ensure_ascii=False)
+        console.print(Panel(Syntax(ir_json, "json", theme="monokai"), title="Phase 1: Audio IR", border_style="blue"))
 
     if result.reasoning_output:
         ro_json = json.dumps(result.reasoning_output.model_dump(mode="json"), indent=2, ensure_ascii=False)
         console.print(Panel(Syntax(ro_json, "json", theme="monokai"), title="Phase 2: Reasoning Output", border_style="yellow"))
 
-    mcq_data = result.model_dump(mode="json", exclude={"visual_ir", "reasoning_output"})
+    mcq_data = result.model_dump(mode="json", exclude={"visual_ir", "video_ir", "audio_ir", "reasoning_output"})
     mcq_json = json.dumps(mcq_data, indent=2, ensure_ascii=False)
     console.print(Panel(Syntax(mcq_json, "json", theme="monokai"), title="Phase 3: Final Benchmark Item (MCQ)", border_style="green"))
 
@@ -145,11 +171,14 @@ async def _download_sample_image() -> Path | None:
 
 
 @click.command()
-@click.option("--image", "-i", type=click.Path(), default=None)
+@click.option("--image", "-i", type=click.Path(), default=None, help="Image file (legacy alias)")
+@click.option("--media", type=click.Path(), default=None, help="Media file: image, video, or audio")
 @click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama"]), default="gemini")
 @click.option("--model", "-m", type=str, default=None)
-def main(image, backend, model):
-    asyncio.run(run_demo(image_path=image, backend=backend, model=model))
+@click.option("--language", "-l", type=str, default="Tanglish (Tamil-English)", help="Target code-mixed language")
+def main(image, media, backend, model, language):
+    path = media or image
+    asyncio.run(run_demo(media_path=path, backend=backend, model=model, language=language))
 
 
 if __name__ == "__main__":

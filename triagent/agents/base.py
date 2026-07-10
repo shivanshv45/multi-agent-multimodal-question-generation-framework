@@ -64,20 +64,21 @@ class BaseAgent(ABC):
                 expand=False,
             ))
 
-    async def _call_backend(self, prompt, image_path=None, temperature=0.4, max_tokens=4096, json_mode=True) -> BackendResponse:
+    async def _call_backend(self, prompt, image_path=None, temperature=0.4, max_tokens=4096, json_mode=True, system_prompt_override: str | None = None) -> BackendResponse:
         start_time = time.time()
+        active_system_prompt = system_prompt_override or self.system_prompt
 
         try:
             if image_path:
                 self.log(f"Sending image + prompt to {self.backend.name}...")
                 response = await self.backend.generate_with_image(
-                    prompt=prompt, image_path=image_path, system_prompt=self.system_prompt,
+                    prompt=prompt, image_path=image_path, system_prompt=active_system_prompt,
                     temperature=temperature, max_tokens=max_tokens, json_mode=json_mode,
                 )
             else:
                 self.log(f"Sending prompt to {self.backend.name}...")
                 response = await self.backend.generate(
-                    prompt=prompt, system_prompt=self.system_prompt,
+                    prompt=prompt, system_prompt=active_system_prompt,
                     temperature=temperature, max_tokens=max_tokens, json_mode=json_mode,
                 )
 

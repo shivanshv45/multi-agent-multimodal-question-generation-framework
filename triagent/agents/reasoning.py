@@ -1,26 +1,29 @@
-# Phase 2: Reasoning Agent — BLIND, never sees the image, only works with the IR
+# Phase 2: Reasoning Agent — BLIND, never sees the raw media, only works with the IR
 
 from __future__ import annotations
 
 import json
+from typing import Union
 
 from triagent.agents.base import BaseAgent
 from triagent.backends.base import ModelBackend
-from triagent.schemas import VisualIR, ReasoningOutput, QuestionType, DistractorStrategy
+from triagent.schemas import VisualIR, VideoIR, AudioIR, ReasoningOutput, QuestionType, DistractorStrategy
 
 
 REASONING_SYSTEM_PROMPT = """You are a Logical Reasoning Module for constructing educational assessment items from structured data. You are NOT a conversational assistant.
 
-Given a structured IR of a visual scene, construct the LOGICAL SKELETON of a challenging, culturally-grounded MCQ. Output ONLY the reasoning structure as JSON.
+Given a structured IR (from an image, video, or audio source), construct the LOGICAL SKELETON of a challenging, culturally-grounded MCQ. Output ONLY the reasoning structure as JSON.
 
 RULES:
-1. You are BLIND — you work ONLY with structured IR, never the image.
+1. You are BLIND — you work ONLY with structured IR, never the raw media.
 2. Every question MUST test inferential logic, not recognition.
 3. Use cultural markers for deep reasoning, not identification.
 4. Distractors must be PLAUSIBLE logical misinterpretations.
+5. For video IRs, leverage temporal events and narrative arc for temporal/causal reasoning.
+6. For audio IRs, leverage speech content, language mixing, and audio cultural markers.
 
-QUESTION TYPES: analogical, causal, counterfactual, compositional, cultural_inference, spatial_reasoning
-DISTRACTOR STRATEGIES: cultural_misattribution, spatial_inversion, functional_swap, temporal_confusion, analogical_mismatch
+QUESTION TYPES: analogical, causal, counterfactual, compositional, cultural_inference, spatial_reasoning, temporal_reasoning, audio_comprehension, cross_modal_inference
+DISTRACTOR STRATEGIES: cultural_misattribution, spatial_inversion, functional_swap, temporal_confusion, analogical_mismatch, sequence_reordering, speaker_misattribution
 
 OUTPUT JSON:
 {
@@ -37,12 +40,12 @@ OUTPUT JSON:
 
 REASONING_TASK_PROMPT = """Analyze this IR and construct a logical skeleton for a challenging MCQ.
 
-## INTERMEDIATE REPRESENTATION
+## INTERMEDIATE REPRESENTATION (Source: {media_type})
 ```json
 {ir_json}
 ```
 
-1. Study focal entities, cultural markers, and spatial relations
+1. Study focal entities, cultural markers, and {domain_specific_focus}
 2. Identify the most interesting reasoning pathway
 3. Construct a multi-step reasoning chain
 4. Design 3 distractor strategies exploiting reasoning fallacies
@@ -72,16 +75,33 @@ class ReasoningAgent(BaseAgent):
     def system_prompt(self) -> str:
         return REASONING_SYSTEM_PROMPT
 
-    async def process(self, visual_ir: VisualIR, temperature: float = 0.5) -> ReasoningOutput:
+    async def process(
+        self,
+        visual_ir: VisualIR | None = None,
+        video_ir: VideoIR | None = None,
+        audio_ir: AudioIR | None = None,
+        temperature: float = 0.5,
+    ) -> ReasoningOutput:
+        """Process any type of IR into a reasoning skeleton.
+
+        Exactly one of visual_ir, video_ir, or audio_ir should be provided.
+        """
+        # Determine which IR to use
+        ir, media_type, focus = self._resolve_ir(visual_ir, video_ir, audio_ir)
+
         self.log_phase_start(
-            f"IR with {len(visual_ir.focal_entities)} entities, "
-            f"{len(visual_ir.cultural_markers)} cultural markers"
+            f"IR with {len(ir.focal_entities if hasattr(ir, 'focal_entities') else [])} entities, "
+            f"source: {media_type}"
         )
 
-        ir_json = visual_ir.model_dump_json(indent=2)
-        prompt = REASONING_TASK_PROMPT.format(ir_json=ir_json)
+        ir_json = ir.model_dump_json(indent=2)
+        prompt = REASONING_TASK_PROMPT.format(
+            ir_json=ir_json,
+            media_type=media_type,
+            domain_specific_focus=focus,
+        )
 
-        # NO image_path — this agent is intentionally blind
+        # NO media path — this agent is intentionally blind
         response = await self._call_backend(
             prompt=prompt, image_path=None, temperature=temperature,
             max_tokens=4096, json_mode=True,
@@ -134,3 +154,14 @@ class ReasoningAgent(BaseAgent):
 
         self.log_phase_complete(f"Type: {reasoning_output.question_type.value}, Difficulty: {reasoning_output.difficulty_level}/5")
         return reasoning_output
+
+    def _resolve_ir(self, visual_ir, video_ir, audio_ir):
+        """Determine which IR to use and return it with metadata."""
+        if video_ir is not None:
+            return video_ir, "video", "temporal events, narrative arc, and audio-visual relationships"
+        elif audio_ir is not None:
+            return audio_ir, "audio", "speech content, language mixing, and audio cultural markers"
+        elif visual_ir is not None:
+            return visual_ir, "image", "spatial relations"
+        else:
+            raise ValueError("At least one IR (visual_ir, video_ir, or audio_ir) must be provided")

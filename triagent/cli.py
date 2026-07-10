@@ -1,4 +1,4 @@
-# CLI — run `python -m triagent run --image photo.jpg` or `python -m triagent check`
+# CLI — run `python -m triagent run --media photo.jpg` or `python -m triagent check`
 
 from __future__ import annotations
 
@@ -12,9 +12,11 @@ from rich.panel import Panel
 from rich.table import Table
 
 from triagent.config import load_config
-from triagent.pipeline import TriAgentPipeline
+from triagent.pipeline import TriAgentPipeline, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS
 
 console = Console()
+
+ALL_MEDIA_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
 
 
 def _print_banner():
@@ -40,13 +42,22 @@ def cli(ctx):
 
 
 @cli.command()
-@click.option("--image", "-i", type=click.Path(exists=True), required=True)
-@click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama", "openai", "groq"]), default=None)
+@click.option("--image", "-i", type=click.Path(exists=True), default=None, help="Image file (legacy alias for --media)")
+@click.option("--media", type=click.Path(exists=True), default=None, help="Media file: image, video, or audio")
+@click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama"]), default=None)
 @click.option("--model", "-m", type=str, default=None)
 @click.option("--context", "-c", type=str, default="")
+@click.option("--language", "-l", type=str, default="Tanglish (Tamil-English)", help="Target code-mixed language")
 @click.option("--output", "-o", type=click.Path(), default="./output")
-def run(image, backend, model, context, output):
+def run(image, media, backend, model, context, language, output):
+    """Process a single image, video, or audio file into a benchmark MCQ."""
     _print_banner()
+
+    # Support both --image (legacy) and --media (new)
+    media_path = media or image
+    if not media_path:
+        console.print("[red]Please provide a media file via --media or --image[/red]")
+        sys.exit(1)
 
     overrides = {"output_dir": output}
     if backend:
@@ -61,27 +72,35 @@ def run(image, backend, model, context, output):
     config = load_config(**overrides)
     pipeline = TriAgentPipeline.from_config(config)
 
-    result = asyncio.run(pipeline.run(image, additional_context=context))
+    result = asyncio.run(pipeline.run(media_path, additional_context=context, target_language=language))
     console.print("\n[bold green]✓ Pipeline completed successfully![/bold green]")
 
 
 @cli.command()
-@click.option("--image-dir", "-d", type=click.Path(exists=True), required=True)
-@click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama", "openai", "groq"]), default=None)
+@click.option("--media-dir", "-d", type=click.Path(exists=True), required=True, help="Directory of media files")
+@click.option("--backend", "-b", type=click.Choice(["gemini", "grok", "ollama"]), default=None)
+@click.option("--language", "-l", type=str, default="Tanglish (Tamil-English)", help="Target code-mixed language")
 @click.option("--output", "-o", type=click.Path(), default="./output")
 @click.option("--export", "-e", type=click.Path(), default=None)
-def batch(image_dir, backend, output, export):
+def batch(media_dir, backend, language, output, export):
+    """Batch process all media files (images, videos, audio) in a directory."""
     _print_banner()
 
-    img_dir = Path(image_dir)
-    extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
-    images = [f for f in img_dir.iterdir() if f.suffix.lower() in extensions]
+    dir_path = Path(media_dir)
+    media_files = [f for f in dir_path.iterdir() if f.suffix.lower() in ALL_MEDIA_EXTENSIONS]
 
-    if not images:
-        console.print(f"[red]No images found in {img_dir}[/red]")
+    if not media_files:
+        console.print(f"[red]No supported media files found in {dir_path}[/red]")
         sys.exit(1)
 
-    console.print(f"[cyan]Found {len(images)} images in {img_dir}[/cyan]")
+    # Categorize for the user
+    images = [f for f in media_files if f.suffix.lower() in IMAGE_EXTENSIONS]
+    videos = [f for f in media_files if f.suffix.lower() in VIDEO_EXTENSIONS]
+    audios = [f for f in media_files if f.suffix.lower() in AUDIO_EXTENSIONS]
+    console.print(
+        f"[cyan]Found {len(media_files)} media files: "
+        f"{len(images)} images, {len(videos)} videos, {len(audios)} audio[/cyan]"
+    )
 
     overrides = {"output_dir": output}
     if backend:
@@ -91,7 +110,7 @@ def batch(image_dir, backend, output, export):
 
     config = load_config(**overrides)
     pipeline = TriAgentPipeline.from_config(config)
-    results = asyncio.run(pipeline.run_batch(images))
+    results = asyncio.run(pipeline.run_batch(media_files, target_language=language))
 
     if export:
         pipeline.export_dataset(export)
@@ -101,6 +120,7 @@ def batch(image_dir, backend, output, export):
 
 @cli.command()
 def check():
+    """Check backend configuration and connectivity."""
     _print_banner()
 
     config = load_config()
@@ -116,7 +136,7 @@ def check():
         config.agents.reasoning.backend: [],
         config.agents.synthesis.backend: [],
     }
-    assignments[config.agents.visual.backend].append(f"Visual ({config.agents.visual.model})")
+    assignments[config.agents.visual.backend].append(f"Visual+Video+Audio ({config.agents.visual.model})")
     assignments[config.agents.reasoning.backend].append(f"Reasoning ({config.agents.reasoning.model})")
     assignments[config.agents.synthesis.backend].append(f"Synthesis ({config.agents.synthesis.model})")
 
@@ -127,6 +147,12 @@ def check():
         table.add_row(backend.title(), key_str, agents)
 
     console.print(table)
+
+    # Show supported media types
+    console.print("\n[cyan]Supported media types:[/cyan]")
+    console.print(f"  Images: {', '.join(sorted(IMAGE_EXTENSIONS))}")
+    console.print(f"  Videos: {', '.join(sorted(VIDEO_EXTENSIONS))}")
+    console.print(f"  Audio:  {', '.join(sorted(AUDIO_EXTENSIONS))}")
 
     console.print("\n[cyan]Testing connectivity...[/cyan]")
     for backend_name in config.get_active_backends():
