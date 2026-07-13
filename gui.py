@@ -85,7 +85,13 @@ class TriAgentGUI:
                 self.selected_paths = [folder]
                 self.lbl_selected.config(text=f"Selected Folder: {folder}")
         else:
-            files = filedialog.askopenfilenames(title="Select Media Files", filetypes=[("All Media", "*.png *.jpg *.jpeg *.mp4 *.mp3 *.wav"), ("All Files", "*.*")])
+            files = filedialog.askopenfilenames(
+                title="Select Media Files", 
+                filetypes=[
+                    ("All Media", "*.png *.jpg *.jpeg *.webp *.mp4 *.avi *.mov *.mp3 *.wav *.m4a"), 
+                    ("All Files", "*.*")
+                ]
+            )
             if files:
                 self.selected_paths = list(files)
                 self.lbl_selected.config(text=f"Selected {len(files)} file(s)")
